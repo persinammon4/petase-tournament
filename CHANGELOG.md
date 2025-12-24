@@ -19,3 +19,13 @@
 - **`PETASE_BLUEPRINT.md`**:
     - Updated **Methodology** section to reflect the switch to Pseudo-Log-Likelihood (PLL).
     - Updated **Formula** to the PLL equation: $\text{Score} = \sum_{i=1}^{L} \log P(x_i \mid x_{\setminus i})$.
+
+## [2025-12-24] - Performance Optimization
+
+### Changed
+- **`src/zero_shot/score.py`**:
+    - **Vectorization**: Rewrote `compute_pseudo_likelihood` to construct the entire masked batch at once instead of iterating loop-by-loop. This reduces Python overhead and maximizes GPU parallelism.
+    - **Mixed Precision**: Added support for `float16` (FP16) inference on CUDA devices, doubling throughput and reducing memory footprint.
+    - **Batching**: Increased default batch size to 128 (configurable), allowing entire sequences to be processed in a single forward pass on A100 GPUs.
+- **`PETASE_BLUEPRINT.md`**: Updated the "Inference Process" to document the vectorized batching strategy.
+

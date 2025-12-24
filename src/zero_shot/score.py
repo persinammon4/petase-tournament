@@ -10,54 +10,71 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.zero_shot.utils import load_wildtype, load_test_data, get_mutations
 
-def compute_pseudo_likelihood(sequence, model, tokenizer, device, batch_size=8):
+def compute_pseudo_likelihood(sequence, model, tokenizer, device, batch_size=64):
     """
-    Computes the Pseudo-Log-Likelihood (PLL) of a sequence.
+    Computes the Pseudo-Log-Likelihood (PLL) of a sequence efficiently.
     PLL = Sum( log P(x_i | x_{/i}) ) for all i in sequence.
+    
+    Optimized for batch processing and GPU throughput.
     
     Args:
         sequence: Amino acid string
         model: ESM model
         tokenizer: ESM tokenizer
         device: torch device
-        batch_size: Batch size for masking (higher = faster but more VRAM)
+        batch_size: Batch size for inference (set high for A100, e.g., 128+)
     """
     tensor_seq = tokenizer(sequence, return_tensors="pt")["input_ids"].to(device)
     # tensor_seq shape: [1, seq_len + 2] (cls + seq + eos)
     seq_len = tensor_seq.shape[1] - 2 # Actual protein length
     
-    # We only mask the protein residues, not CLS (0) or EOS (last)
-    # Indices to mask: 1 to seq_len
-    mask_indices = list(range(1, seq_len + 1))
+    # Create inputs: repeat sequence (seq_len) times
+    # Shape: [seq_len, total_len]
+    # We use repeat instead of expand to ensure memory is allocated for masking
+    inputs = tensor_seq.repeat(seq_len, 1)
     
-    log_likelihoods = []
+    # Create diagonal mask indices (1 to seq_len)
+    # Row i masks position i+1
+    mask_indices = torch.arange(1, seq_len + 1, device=device)
     
-    # Process in batches to save memory
-    for i in range(0, len(mask_indices), batch_size):
-        batch_indices = mask_indices[i : i + batch_size]
-        current_batch_size = len(batch_indices)
+    # Apply mask: inputs[i, i+1] = mask_token
+    inputs[torch.arange(seq_len), mask_indices] = tokenizer.mask_token_id
+    
+    total_log_likelihood = 0.0
+    
+    # Process in batches
+    for i in range(0, seq_len, batch_size):
+        batch_input = inputs[i : i + batch_size]
+        current_batch_indices = mask_indices[i : i + batch_size]
         
-        # Create a batch of inputs
-        # Shape: [current_batch_size, total_seq_len]
-        batch_input = tensor_seq.repeat(current_batch_size, 1)
-        
-        # Apply masks
-        for batch_idx, seq_idx in enumerate(batch_indices):
-            batch_input[batch_idx, seq_idx] = tokenizer.mask_token_id
-            
         with torch.no_grad():
-            logits = model(batch_input).logits # [batch, seq_len, vocab]
+            # Forward pass
+            logits = model(batch_input).logits # [batch, seq_len+2, vocab]
             
-        # Extract log_softmax probabilities
-        log_probs = torch.log_softmax(logits, dim=-1)
+        # We only care about the logits at the masked positions
+        # Gather logits: [batch, vocab] at the specific masked indices
+        # logits[row, mask_idx, :]
+        masked_logits = logits[
+            torch.arange(len(batch_input), device=device), 
+            current_batch_indices, 
+            :
+        ]
         
-        # Get the log-prob of the TRUE token at the masked position
-        for batch_idx, seq_idx in enumerate(batch_indices):
-            true_token = tensor_seq[0, seq_idx]
-            token_log_prob = log_probs[batch_idx, seq_idx, true_token].item()
-            log_likelihoods.append(token_log_prob)
+        # Compute log_softmax over vocab
+        log_probs = torch.log_softmax(masked_logits, dim=-1)
+        
+        # Get the log-prob of the TRUE token
+        true_tokens = tensor_seq[0, current_batch_indices]
+        
+        # Gather the log prob of the true token
+        token_log_probs = log_probs[
+            torch.arange(len(batch_input), device=device), 
+            true_tokens
+        ]
+        
+        total_log_likelihood += token_log_probs.sum().item()
             
-    return sum(log_likelihoods)
+    return total_log_likelihood
 
 def main():
     # Configuration
@@ -85,6 +102,12 @@ def main():
     print(f"Loading model: {MODEL_NAME}...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = EsmForMaskedLM.from_pretrained(MODEL_NAME).to(device)
+    
+    # Enable FP16/BF16 for speed on CUDA
+    if device.type == "cuda":
+        model.half() # Use float16
+        print("Model converted to float16 for speed.")
+        
     model.eval()
 
     # Load Data
@@ -96,16 +119,18 @@ def main():
 
     # 1. Compute WT Score (Baseline)
     print("Computing Wildtype Baseline Score...")
-    wt_score = compute_pseudo_likelihood(wt_seq, model, tokenizer, device, batch_size=4)
+    # Increase batch size for WT (single sequence)
+    wt_score = compute_pseudo_likelihood(wt_seq, model, tokenizer, device, batch_size=128)
     print(f"WT Score: {wt_score:.4f}")
 
     # 2. Score Mutants
     results = []
     print("Scoring Mutants...")
     
-    # Adjust batch_size based on your VRAM. 4-8 is safe for 650M on 16GB.
-    # If on Colab with A100, you can increase to 32 or 64.
-    BATCH_SIZE = 4 
+    # Adjust batch_size based on your VRAM. 
+    # For A100 (40GB/80GB), you can easily use 128, 256, or even full sequence length (e.g. 512).
+    # This allows computing the entire PLL in 1 or 2 forward passes.
+    BATCH_SIZE = 128 
     
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
         mut_seq = row['sequence']

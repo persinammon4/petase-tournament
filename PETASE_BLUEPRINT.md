@@ -48,10 +48,10 @@ $$
 
 ### Inference Process
 1.  **Mutation Identification**: Use pairwise alignment to identify if the sequence is a mutant or indel (for logging purposes).
-2.  **PLL Calculation**:
-    *   For a given sequence, iteratively mask every position $i$ from $1$ to $L$.
-    *   Compute the log-probability of the true residue at $i$.
-    *   Sum these log-probabilities to get the sequence PLL.
+2.  **Optimized PLL Calculation**:
+    *   **Vectorization**: Instead of iteratively masking one position at a time (which requires $L$ forward passes), we construct a single batch tensor of shape $(L, L)$ where the diagonal is masked.
+    *   **Batch Processing**: This large batch is processed in chunks (e.g., 128 or 256) depending on GPU memory. On high-end GPUs (A100), the entire sequence can often be processed in a single forward pass.
+    *   **Mixed Precision**: We utilize `float16` (FP16) or `bfloat16` to double throughput and halve memory usage on compatible GPUs.
 3.  **Scoring**: Compute $\text{Score} = \text{PLL}(Mutant) - \text{PLL}(WT)$.
 4.  **Aggregation**: Store the score.
 
