@@ -72,6 +72,14 @@ This will:
 3.  Score all variants in `data/predictive-pet-zero-shot-test-2025.csv`.
 4.  Save the ranked results to `submission_zero_shot.csv`.
 
+### Activity Predictions in micromoles
+
+Copy of ChatGPT vibe coding conversation for activity predictions at pH 5.5 and pH 9.0:
+https://chatgpt.com/share/695887b5-e000-8004-a4c1-5901ef01116e
+
+There are two models for predicting activity one coded in `seq2ph.py` and the other in `seq2ph_with_solubility.py`. Solubility scores are taken from [an academia based model](https://loschmidt.chemi.muni.cz/soluprot).
+Originally, solubility was meant to be used to predict expression.
+
 ## 📜 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -32,12 +32,27 @@ def stability_score(sequence, pH, k=0.02):
     score = max(0, 1 - k * Z**2)
     return score
 
+def solubility_score(sequence, pH, a=0.8):
+    Z = abs(net_charge(sequence, pH))
+    return 1 - math.exp(-a * Z)
+
+def catalytic_ph_factor(pH, optimal_pH=8.0, sigma=1.2):
+    return math.exp(-((pH - optimal_pH)**2) / (2 * sigma**2))
+
 # PETase activity model (μmol TPA/min·mg enzyme)
-def petase_activity(sequence, pH, max_activity=1.0, optimal_pH=8.0, sigma=1.5):
-    stability = stability_score(sequence, pH)
-    # Gaussian factor for pH effect
-    ph_factor = math.exp(-((pH - optimal_pH)**2) / (2 * sigma**2))
-    activity = max_activity * stability * ph_factor
+def petase_activity(sequence,
+                     pH,
+                     max_activity=1.0,   # μmol TPA / min·mg
+                     k_stability=0.02,
+                     a_solubility=0.8,
+                     optimal_pH=8.0,
+                     sigma=1.2):
+
+    stability = stability_score(sequence, pH, k_stability)
+    solubility = solubility_score(sequence, pH, a_solubility)
+    catalysis = catalytic_ph_factor(pH, optimal_pH, sigma)
+
+    activity = max_activity * stability * solubility * catalysis
     return activity
 
 # Example usage
