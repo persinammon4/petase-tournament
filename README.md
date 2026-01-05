@@ -74,11 +74,12 @@ This will:
 
 ### Activity Predictions in micromoles
 
-Copy of ChatGPT vibe coding conversation for activity predictions at pH 5.5 and pH 9.0:
-https://chatgpt.com/share/695887b5-e000-8004-a4c1-5901ef01116e
+Run `attributes2csv.py` and check the predictions in `final_data/wt_attributes.csv`.
 
 There are two models for predicting activity one coded in `seq2ph.py` and the other in `seq2ph_with_solubility.py`. Solubility scores are taken from [an academia based model](https://loschmidt.chemi.muni.cz/soluprot).
 Originally, solubility was meant to be used to predict expression.
+
+The `seq2ph_with_solubility.py` model is used in `attributes2csv.py` to predict.
 
 ## 📜 License
 

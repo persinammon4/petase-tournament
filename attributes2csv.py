@@ -1,5 +1,5 @@
 import pandas as pd
-from seq2ph import net_charge, stability_score, petase_activity
+from seq2ph_with_solubility import net_charge, stability_score, petase_activity
 
 df = pd.read_csv("data/pet-2025-wildtype-cds.csv")
 df2 = pd.read_csv("data/solubility_scores.csv")
