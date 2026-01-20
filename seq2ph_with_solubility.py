@@ -65,7 +65,7 @@ def catalytic_ph_factor(pH, optimal_pH=8.0, sigma=1.2):
 # PETase activity model (μmol TPA/min·mg enzyme)
 def petase_activity(sequence,
                      pH,
-                     max_activity=1.0,   # μmol TPA / min·mg <= should this be looked up from another dataset, right now totals never exceed 1 [unit]
+                     max_activity=5.0,   # μmol TPA / min·mg <= should this be looked up from another dataset, right now totals never exceed 1 [unit]
                      k_stability=0.02,
                      a_solubility=0.8,
                      optimal_pH=8.0,
